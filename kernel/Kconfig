@@ -35,6 +35,15 @@ config KSU_DISABLE_POLICY
 	  Escalation will always use the default full root profile, and
 	  non-root handling will follow the global umount policy only.
 
+config KSU_DISABLE_SELINUX_HIDE
+	bool "Disable KernelSU SELinux hiding"
+	depends on KSU
+	default y
+	help
+	  Disable SELinux hide feature. SELinux hide requires struct selinux_policy
+	  which was introduced in Linux 5.10. Disabling this allows KernelSU to run
+	  on older kernels (like 5.4) without requiring selinuxfs interception.
+
 config KSU_X86_PATCH_SYSCALL_DISPATCHER
 	bool "Dynamically patch x64's hardened syscall dispatcher to support syscall hooks"
 	depends on KSU && X86_64
