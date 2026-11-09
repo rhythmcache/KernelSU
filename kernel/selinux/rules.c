@@ -18,6 +18,17 @@
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
 struct selinux_policy *backup_sepolicy;
 #define SELINUX_POLICY_INSTEAD_SELINUX_SS
+#else
+/*
+ * 5.4-compat: In Linux 5.4, selinux_state.ss->policydb is protected by policy_rwlock
+ * (rwlock_t). However, policy_rwlock cannot be held across rule mutation because
+ * avtab_insert_node() in security/selinux/ss/avtab.c allocates using GFP_KERNEL, which
+ * would trigger BUG: scheduling while atomic if called under a spin rwlock.
+ * Upstream avoids this by building new policies off-line and swapping them under
+ * policy_rwlock with memcpy. In KernelSU, we serialize in-place modifications using
+ * ksu_sepolicy_mutex and invalidate the cache with reset_avc_cache(0).
+ */
+static DEFINE_MUTEX(ksu_sepolicy_mutex);
 #endif
 
 #define ALL NULL
@@ -30,7 +41,7 @@ static struct policydb *get_policydb(void)
     db = &policy->policydb;
 #else
     /* 5.4-compat: before 5.10, selinux_state contains ss instead of policy */
-    struct selinux_ss *ss = rcu_dereference(selinux_state.ss);
+    struct selinux_ss *ss = selinux_state.ss;
     db = &ss->policydb;
 #endif
     return db;
@@ -189,11 +200,11 @@ void apply_kernelsu_rules()
 out_unlock:
     mutex_unlock(&selinux_state.policy_mutex);
 #else
-    /* 5.4-compat: on Linux < 5.10, populate rules directly into ss->policydb */
-    rcu_read_lock();
+    /* 5.4-compat: on Linux < 5.10, serialize rule mutation via ksu_sepolicy_mutex */
+    mutex_lock(&ksu_sepolicy_mutex);
     struct policydb *db = get_policydb();
     ksu_populate_rules(db);
-    rcu_read_unlock();
+    mutex_unlock(&ksu_sepolicy_mutex);
 
     reset_avc_cache(0);
 #endif
@@ -510,8 +521,8 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
     }
     db = &pol->policydb;
 #else
-    /* 5.4-compat: before 5.10, apply batch commands directly to ss->policydb */
-    rcu_read_lock();
+    /* 5.4-compat: before 5.10, serialize batch commands via ksu_sepolicy_mutex */
+    mutex_lock(&ksu_sepolicy_mutex);
     db = get_policydb();
 #endif
 
@@ -575,13 +586,13 @@ out_drop_new_policy:
 out_unlock:
     mutex_unlock(&selinux_state.policy_mutex);
 #else
-    rcu_read_unlock();
+    mutex_unlock(&ksu_sepolicy_mutex);
     reset_avc_cache(0);
     ret = success_cmd_count;
     goto out_free;
 
 out_drop_new_policy:
-    rcu_read_unlock();
+    mutex_unlock(&ksu_sepolicy_mutex);
 #endif
 out_free:
     kvfree(payload);

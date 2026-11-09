@@ -36,7 +36,7 @@ This branch (`5.4-compat`) adapts KernelSU to build and run as a built-in driver
 * **`fsnotify_ops`**: `.handle_inode_event` was added in Linux 5.9. On `< 5.9.0`, `.handle_event` with 8 parameters is used, forwarding `inode`, `mask`, and `name` to `ksu_handle_inode_event`.
 
 ### SELinux Adaptation (`kernel/selinux/`)
-* **Policydb Access**: Linux 5.10 refactored SELinux state to encapsulate policy inside `selinux_state.policy` (`struct selinux_policy`). On Linux 5.4, policy resides in `selinux_state.ss->policydb` (`struct selinux_ss`). `get_policydb()` accesses `selinux_state.ss->policydb` under RCU.
+* **Policydb Access & Locking**: Linux 5.10 refactored SELinux state to encapsulate policy inside `selinux_state.policy` (`struct selinux_policy`). On Linux 5.4, policy resides in `selinux_state.ss->policydb` (`struct selinux_ss`). While readers in 5.4 take `policy_rwlock`, writers cannot hold `policy_rwlock` (a spinlock) across `ksu_populate_rules` or `handle_sepolicy` because `avtab_insert_node()` allocates with `GFP_KERNEL` (triggering scheduling-while-atomic if called under spinlocks). Instead, KernelSU serializes policy mutations using `ksu_sepolicy_mutex`, applies in-place updates, and flushes with `reset_avc_cache(0)`.
 * **Policy Duplication & Application**: `ksu_dup_sepolicy` and `ksu_destroy_sepolicy` are guarded for `>= 5.10.0`. On Linux 5.4, rules are applied in-place to `selinux_state.ss->policydb`, followed by `reset_avc_cache(0)`.
 * **Filename Transitions**: On Linux `< 5.7.0`, `hashtab_insert` takes 3 arguments (`db->filename_trans, new_key, trans`), and `struct filename_trans` is used as the key. Restored compatibility logic from KernelSU's pre-1.0 commits.
 
