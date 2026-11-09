@@ -14,4 +14,25 @@
 #include <linux/sched/signal.h>
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 12, 0)
+#include <asm/pgtable.h>
+
+#ifndef pmd_leaf
+#ifdef pmd_sect
+#define pmd_leaf(pmd) pmd_sect(pmd)
+#elif defined(pmd_large)
+#define pmd_leaf(pmd) pmd_large(pmd)
+#endif
+#endif
+
+#ifndef pud_leaf
+#ifdef pud_sect
+#define pud_leaf(pud) pud_sect(pud)
+#elif defined(pud_large)
+#define pud_leaf(pud) pud_large(pud)
+#endif
+#endif
+
+#endif
+
 #endif /* __KSU_COMPAT_H */

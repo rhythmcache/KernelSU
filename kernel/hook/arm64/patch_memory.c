@@ -13,6 +13,8 @@
 #include "linux/stop_machine.h"
 #include "asm/cacheflush.h"
 #include "asm-generic/fixmap.h"
+#include <asm/sections.h>
+#include <asm/memory.h>
 
 // https://github.com/fuqiuluo/ovo/blob/f7da411458e87d32438dc14fce5a3313ed0c967e/ovo/mmuhack.c#L21
 
@@ -30,6 +32,11 @@ unsigned long phys_from_virt(unsigned long addr, int *err)
     pte_t *pte;
 
     *err = 0;
+
+    /* For core kernel image addresses (_text .. _end), use direct translation */
+    if (addr >= (unsigned long)_text && addr < (unsigned long)_end) {
+        return __pa_symbol(addr);
+    }
 
     pgd = pgd_offset(mm, addr);
     if (pgd_none(*pgd) || pgd_bad(*pgd))
