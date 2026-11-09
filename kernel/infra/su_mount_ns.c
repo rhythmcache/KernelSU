@@ -13,6 +13,7 @@
 #include <linux/syscalls.h>
 #include <linux/task_work.h>
 #include <linux/version.h>
+#include <linux/uaccess.h>
 #include <uapi/linux/mount.h>
 
 #include "arch.h"
@@ -21,8 +22,29 @@
 #include "infra/su_mount_ns.h"
 #include "util.h"
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
 extern int path_mount(const char *dev_name, struct path *path, const char *type_page, unsigned long flags,
                       void *data_page);
+#else
+/* 5.4-compat: path_mount was introduced in 5.8; on 5.4 emulate using do_mount */
+extern long do_mount(const char *dev_name, const char __user *dir_name, const char *type_page,
+                     unsigned long flags, void *data_page);
+
+static inline int path_mount(const char *dev_name, struct path *path, const char *type_page,
+                             unsigned long flags, void *data_page)
+{
+    char buf[64];
+    char *cwd = d_path(path, buf, sizeof(buf));
+    if (IS_ERR(cwd))
+        return PTR_ERR(cwd);
+
+    mm_segment_t old_fs = get_fs();
+    set_fs(KERNEL_DS);
+    long ret = do_mount(dev_name, (const char __user *)cwd, type_page, flags, data_page);
+    set_fs(old_fs);
+    return (int)ret;
+}
+#endif
 
 // global mode , need CAP_SYS_ADMIN and CAP_SYS_CHROOT to perform setns
 static void ksu_mnt_ns_global(void)
