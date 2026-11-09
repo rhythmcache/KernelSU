@@ -90,7 +90,7 @@ KSU_KERNEL_DIR := $(src)
 endif
 endif
 
-ccflags-y += -I$(KSU_KERNEL_DIR) -I$(KSU_KERNEL_DIR)/include
+ccflags-y += -I$(KSU_KERNEL_DIR) -I$(KSU_KERNEL_DIR)/include -I$(KSU_KERNEL_DIR)/compat -include $(KSU_KERNEL_DIR)/compat/compat.h /* 5.4-compat */
 
 # preinit runner: a static nolibc binary embedded into kernelsu, see preinit/.
 # It is built against the installed UAPI headers of the target kernel

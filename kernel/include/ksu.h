@@ -4,6 +4,8 @@
 #include <linux/types.h>
 #include <linux/cred.h>
 #include <linux/workqueue.h>
+#include <linux/version.h>
+#include "compat.h" /* 5.4-compat */
 
 #define KERNEL_SU_VERSION KSU_VERSION
 
@@ -13,7 +15,9 @@ extern bool allow_shell;
 #ifdef MODULE
 extern bool ksu_bundled;
 #endif
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
 extern struct selinux_policy *backup_sepolicy;
+#endif /* 5.4-compat */
 extern bool ksu_no_custom_rc;
 
 static inline int startswith(char *s, char *prefix)
