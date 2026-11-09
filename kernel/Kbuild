@@ -96,7 +96,7 @@ KSU_KERNEL_DIR := $(src)
 endif
 endif
 
-ccflags-y += -I$(KSU_KERNEL_DIR) -I$(KSU_KERNEL_DIR)/include -I$(KSU_KERNEL_DIR)/compat -include $(KSU_KERNEL_DIR)/compat/compat.h /* 5.4-compat */
+ccflags-y += -I$(KSU_KERNEL_DIR) -I$(KSU_KERNEL_DIR)/include -I$(KSU_KERNEL_DIR)/compat -include $(KSU_KERNEL_DIR)/compat/compat.h # 5.4-compat
 
 # preinit runner: a static nolibc binary embedded into kernelsu, see preinit/.
 # It is built against the installed UAPI headers of the target kernel
@@ -139,7 +139,7 @@ MDIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 # Workaround bazel
 # https://github.com/tiann/KernelSU/pull/316#issuecomment-1479043219
-GIT := $(shell PATH="$$PATH":/usr/bin:/usr/local/bin which git)
+GIT := $(shell command -v git 2>/dev/null || PATH="$$PATH":/usr/bin:/usr/local/bin which git 2>/dev/null)
 ifneq ($(GIT),)
 # Check if this is a git repository
 # Try to detect Git repo intelligently
