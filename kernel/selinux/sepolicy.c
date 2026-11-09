@@ -503,7 +503,7 @@ static bool add_type_rule(struct policydb *db, const char *s, const char *t, con
 // 5.9.0 : static inline int hashtab_insert(struct hashtab *h, void *key, void
 // *datum, struct hashtab_key_params key_params) 5.8.0: int
 // hashtab_insert(struct hashtab *h, void *k, void *d);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
 static u32 filenametr_hash(const void *k)
 {
     const struct filename_trans_key *ft = k;
@@ -547,7 +547,6 @@ static bool add_filename_trans(struct policydb *db, const char *s, const char *t
 {
     struct type_datum *src, *tgt, *def;
     struct class_datum *cls;
-    struct filename_trans_key *new_key = NULL;
     int rc;
 
     src = symtab_search(&db->p_types, s);
@@ -571,6 +570,8 @@ static bool add_filename_trans(struct policydb *db, const char *s, const char *t
         return false;
     }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
+    struct filename_trans_key *new_key = NULL;
     struct filename_trans_key key;
     key.ttype = tgt->value;
     key.tclass = cls->value;
@@ -610,7 +611,11 @@ static bool add_filename_trans(struct policydb *db, const char *s, const char *t
         }
         trans->next = last;
         trans->otype = def->value;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
         rc = hashtab_insert(&db->filename_trans, new_key, trans, filenametr_key_params);
+#else
+        rc = hashtab_insert(&db->filename_trans, new_key, trans);
+#endif
         if (rc) {
             pr_err("add_filename_trans: hashtab_insert failed: %d\n", rc);
             goto free_name;
@@ -628,6 +633,50 @@ free_trans:
     kfree(trans);
 out:
     return false;
+#else
+    /* 5.4-compat: before 5.7, db->filename_trans is a pointer and key is struct filename_trans */
+    struct filename_trans key;
+    key.ttype = tgt->value;
+    key.tclass = cls->value;
+    key.name = (char *)o;
+
+    struct filename_trans_datum *trans =
+        hashtab_search(db->filename_trans, &key);
+
+    if (trans == NULL) {
+        trans = (struct filename_trans_datum *)kcalloc(1, sizeof(*trans), GFP_ATOMIC);
+        if (!trans) {
+            pr_err("add_filename_trans: Failed to alloc datum\n");
+            return false;
+        }
+        struct filename_trans *new_key =
+            (struct filename_trans *)kmalloc(sizeof(*new_key), GFP_ATOMIC);
+        if (!new_key) {
+            pr_err("add_filename_trans: Failed to alloc new_key\n");
+            kfree(trans);
+            return false;
+        }
+        *new_key = key;
+        new_key->name = kstrdup(key.name, GFP_ATOMIC);
+        if (!new_key->name) {
+            pr_err("add_filename_trans: Failed to alloc name\n");
+            kfree(new_key);
+            kfree(trans);
+            return false;
+        }
+        trans->otype = def->value;
+        rc = hashtab_insert(db->filename_trans, new_key, trans);
+        if (rc) {
+            pr_err("add_filename_trans: hashtab_insert failed: %d\n", rc);
+            kfree(new_key->name);
+            kfree(new_key);
+            kfree(trans);
+            return false;
+        }
+    }
+
+    return ebitmap_set_bit(&db->filename_trans_ttypes, src->value - 1, 1) == 0;
+#endif
 }
 
 static bool add_genfscon(struct policydb *db, const char *fs_name, const char *path, const char *context)
@@ -947,6 +996,7 @@ bool ksu_genfscon(struct policydb *db, const char *fs_name, const char *path, co
 
 // ======== sepolicy ========
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
 void ksu_destroy_sepolicy(struct selinux_policy *pol)
 {
     policydb_destroy(&pol->policydb);
@@ -1032,3 +1082,4 @@ out_free_data:
 
     return ERR_PTR(ret);
 }
+#endif /* 5.4-compat */
